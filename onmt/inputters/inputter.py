@@ -481,14 +481,20 @@ class OrderedIterator(torchtext.data.Iterator):
     def create_batches(self):
         if self.train:
             def _pool(data, random_shuffler):
-                for p in torchtext.data.batch(data, self.batch_size * 100):
+                # longest example first
+                sorted_data = sorted(data, reverse=True, key=lambda x: len(x.src[0]))
+                for p in torchtext.data.batch(sorted_data, self.batch_size * 100):
                     p_batch = batch_iter(
-                        sorted(p, key=self.sort_key),
+                        sorted(p, key=lambda x: len(x.src[0]), reverse=True),
                         self.batch_size,
                         batch_size_fn=self.batch_size_fn,
                         batch_size_multiple=self.batch_size_multiple)
-                    for b in random_shuffler(list(p_batch)):
-                        yield b
+                    # Longest batch first
+                    pb = list(p_batch)
+                    for bat in pb:
+                        yield bat
+                    # for b in random_shuffler(pb):
+                    #    yield b
 
             self.batches = _pool(self.data(), self.random_shuffler)
         else:
@@ -554,6 +560,9 @@ class DatasetLazyIter(object):
     def __iter__(self):
         num_batches = 0
         paths = self._paths
+        # Ray: Never trigger dataset reload when there is only one dataset provided.
+        # if len(paths) == 1:
+        #
         if self.is_train and self.repeat:
             # Cycle through the shards indefinitely.
             paths = cycle(paths)
